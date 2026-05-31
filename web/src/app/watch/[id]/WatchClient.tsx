@@ -1,0 +1,264 @@
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import styles from "./page.module.css";
+import Link from "next/link";
+import { Play, Loader2 } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import CustomVideoPlayer from "@/components/CustomVideoPlayer";
+import BrandIntro from "@/components/BrandIntro";
+import {
+  getCachedCore,
+  getCachedDownload,
+  fetchCore,
+  fetchDownload,
+} from "@/services/contentCache";
+
+interface WatchClientProps {
+  id: string;
+  initialSeason: number;
+  initialEpisode: number;
+}
+
+export default function WatchClient({ id, initialSeason, initialEpisode }: WatchClientProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Seed from any warm cache so the page can render instantly (no blank screen)
+  const cachedCore = getCachedCore(id);
+
+  const [movie, setMovie] = useState<any>(cachedCore?.movie ?? null);
+  const [seasonsData, setSeasonsData] = useState<any>(cachedCore?.seasons ?? null);
+  const [detailsLoading, setDetailsLoading] = useState(!cachedCore);
+
+  const isSeries = seasonsData?.is_series || false;
+  const apiSeason = isSeries ? initialSeason : 0;
+  const apiEpisode = isSeries ? initialEpisode : 0;
+
+  const [currentSeason, setCurrentSeason] = useState(initialSeason);
+  const [currentEpisode, setCurrentEpisode] = useState(initialEpisode);
+  const [files, setFiles] = useState<any[]>(getCachedDownload(id, apiSeason, apiEpisode) ?? []);
+  const [loadingFiles, setLoadingFiles] = useState(!getCachedDownload(id, apiSeason, apiEpisode));
+  const [selectedFile, setSelectedFile] = useState<any>(null);
+
+  // Branding intro: shown over the stage while the video warms up underneath.
+  const [introDone, setIntroDone] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
+
+  // TMDB Episode Metadata States
+  const [currentSeasonEpisodes, setCurrentSeasonEpisodes] = useState<any[]>([]);
+  const [nextSeasonEpisodes, setNextSeasonEpisodes] = useState<any[]>([]);
+
+  // Sync state when URL params change
+  useEffect(() => {
+    setCurrentSeason(initialSeason);
+    setCurrentEpisode(initialEpisode);
+  }, [initialSeason, initialEpisode]);
+
+  // 1. Load core details (movie + seasons) from the warm cache or network
+  useEffect(() => {
+    let active = true;
+    const core = getCachedCore(id);
+    if (core) {
+      setMovie(core.movie);
+      setSeasonsData(core.seasons);
+      setDetailsLoading(false);
+    } else {
+      setDetailsLoading(true);
+      fetchCore(id)
+        .then((data) => {
+          if (!active) return;
+          setMovie(data.movie);
+          setSeasonsData(data.seasons);
+        })
+        .catch((err) => console.error("Failed to load details", err))
+        .finally(() => {
+          if (active) setDetailsLoading(false);
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  // Sync selectedFile when files change (e.g. changing episode)
+  useEffect(() => {
+    const defaultFile = files.find((f: any) => f.resolution === "720p") || files[0] || null;
+    setSelectedFile(defaultFile);
+  }, [files]);
+
+  // 2. Fetch stream links whenever the season/episode (or series-ness) changes
+  useEffect(() => {
+    let active = true;
+    const s = isSeries ? currentSeason : 0;
+    const e = isSeries ? currentEpisode : 0;
+
+    const cached = getCachedDownload(id, s, e);
+    if (cached) {
+      setFiles(cached);
+      setLoadingFiles(false);
+      return;
+    }
+
+    setLoadingFiles(true);
+    fetchDownload(id, s, e)
+      .then((f) => {
+        if (active) setFiles(f);
+      })
+      .catch((err) => console.error("Failed to load streaming links", err))
+      .finally(() => {
+        if (active) setLoadingFiles(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentSeason, currentEpisode, id, isSeries]);
+
+  // Determine the next episode (within or across seasons)
+  const nextEp = useMemo(() => {
+    if (!isSeries || !seasonsData?.seasons) return null;
+
+    const currentSeasonData = seasonsData.seasons.find((s: any) => s.season === currentSeason);
+    if (!currentSeasonData) return null;
+
+    if (currentEpisode < currentSeasonData.episode_count) {
+      return { season: currentSeason, episode: currentEpisode + 1 };
+    } else {
+      const nextSeasonData = seasonsData.seasons.find((s: any) => s.season === currentSeason + 1);
+      if (nextSeasonData && nextSeasonData.episode_count > 0) {
+        return { season: currentSeason + 1, episode: 1 };
+      }
+    }
+    return null;
+  }, [isSeries, seasonsData, currentSeason, currentEpisode]);
+
+  // Prefetch the next episode's stream links so "Next" is instant
+  useEffect(() => {
+    if (isSeries && nextEp) {
+      fetchDownload(id, nextEp.season, nextEp.episode).catch(() => {});
+    }
+  }, [isSeries, nextEp, id]);
+
+  // Load TMDB episode metadata
+  useEffect(() => {
+    if (!isSeries || !movie?.title) return;
+
+    const loadTMDBData = async () => {
+      try {
+        const { searchTVShow, getSeasonEpisodes } = await import("@/services/tmdb");
+        const meta = await searchTVShow(movie.title);
+
+        if (meta?.id) {
+          const currentEps = await getSeasonEpisodes(meta.id, currentSeason);
+          setCurrentSeasonEpisodes(currentEps);
+
+          if (nextEp && nextEp.season !== currentSeason) {
+            const nextEps = await getSeasonEpisodes(meta.id, nextEp.season);
+            setNextSeasonEpisodes(nextEps);
+          }
+        }
+      } catch (err) {
+        console.error("Watch page TMDB metadata fetch failed:", err);
+      }
+    };
+
+    loadTMDBData();
+  }, [currentSeason, movie?.title, isSeries]);
+
+  const currentEpisodeMeta = useMemo(() => {
+    return currentSeasonEpisodes.find((e: any) => e.episode_number === currentEpisode);
+  }, [currentSeasonEpisodes, currentEpisode]);
+
+  const nextEpisodeMeta = useMemo(() => {
+    if (!nextEp) return null;
+    if (nextEp.season === currentSeason) {
+      return currentSeasonEpisodes.find((e: any) => e.episode_number === nextEp.episode);
+    } else {
+      return nextSeasonEpisodes.find((e: any) => e.episode_number === nextEp.episode);
+    }
+  }, [nextEp, currentSeason, currentSeasonEpisodes, nextSeasonEpisodes]);
+
+  const handleEpisodeChange = (season: number, episode: number) => {
+    setCurrentSeason(season);
+    setCurrentEpisode(episode);
+    router.push(`${pathname}?season=${season}&episode=${episode}`, { scroll: false });
+  };
+
+  const handleNextEpisode = () => {
+    if (nextEp) {
+      handleEpisodeChange(nextEp.season, nextEp.episode);
+    }
+  };
+
+  const backHref = `/${isSeries ? "tv" : "movie"}/${id}`;
+  const playerTitle = movie?.title || "Now Playing";
+  const episodeLabel = isSeries
+    ? `S${currentSeason} · E${currentEpisode}${currentEpisodeMeta?.name ? ` · ${currentEpisodeMeta.name}` : ""}`
+    : undefined;
+
+  const hasError = !detailsLoading && (!movie || (!loadingFiles && (!files || files.length === 0)));
+
+  // Full-screen stage. The branding intro plays immediately while details +
+  // stream links resolve and the video buffers underneath, then fades out once
+  // the video is ready (or the intro's max duration elapses).
+  return (
+    <div className={styles.stage}>
+      {/* The player mounts as soon as stream links exist, so the video buffers
+          behind the intro. */}
+      {movie && !loadingFiles && files && files.length > 0 && (
+        <CustomVideoPlayer
+          files={files}
+          selectedFile={selectedFile}
+          onQualityChange={setSelectedFile}
+          title={playerTitle}
+          episodeTitle={episodeLabel}
+          nextEpisodeTitle={isSeries && nextEp ? (nextEpisodeMeta?.name || `Episode ${nextEp.episode}`) : undefined}
+          onNextEpisode={isSeries && nextEp ? handleNextEpisode : undefined}
+          fillParent
+          backHref={backHref}
+          onReady={() => setVideoReady(true)}
+        />
+      )}
+
+      {/* Branding intro overlay — sits on top until it finishes animating out */}
+      {!introDone && !hasError && (
+        <BrandIntro ready={videoReady} onFinish={() => setIntroDone(true)} />
+      )}
+
+      {/* Fallback loader if the intro finished but the stream is still resolving */}
+      {introDone && !hasError && (loadingFiles || (detailsLoading && !movie)) && (
+        <div className={styles.stageLoader}>
+          <Link href={backHref} className={styles.floatingBack} title="Back to details">
+            <span>←</span>
+          </Link>
+          <Loader2 size={44} className={styles.spinnerIcon} />
+          <span className={styles.stageLoaderText}>{playerTitle}</span>
+        </div>
+      )}
+
+      {/* Error state (only once the intro is not blocking the view) */}
+      {hasError && (
+        <div className={styles.errorContainer}>
+          {!movie ? (
+            <>
+              <h1>Content not found</h1>
+              <Link href="/" className={styles.backHome}>
+                Back to Home
+              </Link>
+            </>
+          ) : (
+            <>
+              <Play size={48} className={styles.disabledPlayIcon} />
+              <h2>Streaming is currently unavailable</h2>
+              <p>No video links were found for this content. Please try again later.</p>
+              <Link href={backHref} className={styles.backHome}>
+                Back to Details
+              </Link>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,37 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  transition: transform 0.2s ease;
+}
+
+.logo:hover {
+  transform: scale(1.03);
+}
+
+.mark {
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(255, 45, 85, 0.45));
+  transition: filter 0.2s ease;
+}
+
+.logo:hover .mark {
+  filter: drop-shadow(0 0 10px rgba(255, 45, 85, 0.75));
+}
+
+.word {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.aura {
+  background: linear-gradient(135deg, #FF2D55 0%, #FF9500 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+}
+

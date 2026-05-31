@@ -1,0 +1,86 @@
+.main {
+  min-height: 100vh;
+  padding: 110px 0 4rem;
+  background-color: var(--bg-primary);
+}
+
+.header {
+  margin-bottom: 2.5rem;
+}
+
+.pageTitle {
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.pageTitle span {
+  color: var(--accent-color);
+}
+
+.subtitle {
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.section {
+  margin-bottom: 3rem;
+}
+
+.sectionTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 1.25rem;
+  border-left: 3px solid var(--accent-color);
+  padding-left: 0.6rem;
+  color: var(--text-primary);
+}
+
+/* Responsive poster grid */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+}
+
+.gridItem {
+  width: 100%;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 6rem 1rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.empty h2 {
+  font-size: 1.4rem;
+  color: var(--text-primary);
+}
+
+.browseLink {
+  margin-top: 0.5rem;
+  background: var(--accent-color);
+  color: #fff;
+  padding: 0.75rem 1.75rem;
+  border-radius: var(--border-radius);
+  font-weight: 600;
+  transition: var(--transition);
+}
+
+.browseLink:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 0 15px var(--accent-glow);
+}
