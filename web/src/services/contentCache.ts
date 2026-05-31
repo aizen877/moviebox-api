@@ -10,7 +10,7 @@
  *    (no skeleton on the destination page).
  */
 
-const BASE_URL = "https://moviebox-v2-api.onrender.com";
+const BASE_URL = "https://movie-api.opsihab.tech";
 
 export interface CoreDetails {
   movie: any;

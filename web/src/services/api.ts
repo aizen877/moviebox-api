@@ -1,4 +1,4 @@
-const BASE_URL = "https://moviebox-v2-api.onrender.com";
+const BASE_URL = "https://movie-api.opsihab.tech";
 
 export async function getHomepage() {
   const res = await fetch(`${BASE_URL}/homepage`, { next: { revalidate: 300 } });
